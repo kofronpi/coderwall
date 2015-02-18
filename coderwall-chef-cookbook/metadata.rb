@@ -6,3 +6,4 @@ description      'Installs/Configures coderwall-chef-cookbook'
 long_description 'Installs/Configures coderwall-chef-cookbook'
 version          '0.1.0'
 
+depends 'apt'
