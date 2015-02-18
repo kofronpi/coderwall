@@ -1,0 +1,1 @@
+node.normal[:languages][:ruby][:default_version] = '2.1'

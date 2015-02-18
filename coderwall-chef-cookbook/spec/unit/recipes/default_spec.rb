@@ -19,5 +19,8 @@ describe 'coderwall-chef-cookbook::default' do
       chef_run # This should not raise an error
     end
 
+    it 'installs ruby' do
+      expect(chef_run).to install_package('ruby')
+    end
   end
 end

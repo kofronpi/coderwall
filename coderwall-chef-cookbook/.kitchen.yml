@@ -13,3 +13,7 @@ suites:
     run_list:
       - recipe[coderwall-chef-cookbook::default]
     attributes:
+  - name: server
+    run_list:
+      - recipe[coderwall-chef-cookbook::default]
+    attributes:

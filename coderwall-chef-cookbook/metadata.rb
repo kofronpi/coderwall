@@ -1,9 +1,10 @@
 name             'coderwall-chef-cookbook'
-maintainer       'The Authors'
-maintainer_email 'you@example.com'
+maintainer       'Pierre-Alexandre Kofron'
+maintainer_email 'pierre-alexandre@kofron.fr'
 license          'all_rights'
 description      'Installs/Configures coderwall-chef-cookbook'
 long_description 'Installs/Configures coderwall-chef-cookbook'
 version          '0.1.0'
 
 depends 'apt'
+depends 'ruby'
