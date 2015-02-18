@@ -1,5 +1,10 @@
+# encoding: utf-8
+
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
+
+require 'multi_json'
+require 'berkshelf/vagrant'
 
 # Load in custom vagrant settings
 raise <<-EOF unless File.exists?("vagrant.yml")
@@ -22,79 +27,79 @@ end
 
 VAGRANTFILE_API_VERSION = "2"
 
-$box = 'coderwall_v3'
-$box_url = 'https://s3.amazonaws.com/coderwall-assets-0/vagrant/coderwall_v3.box' # The box is 1.4GB.
-$provision = 'vagrant/bootstrap.sh'
-
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  VAGRANT_JSON = MultiJson.load(Pathname(__FILE__).dirname.join('.', 'node.json').read)
 
-  config.vm.box = $box
-  config.vm.box_url = $box_url
-  config.vm.provision :shell do |s|
-    s.path = $provision
-  end
-
-  config.ssh.keep_alive = true
+  config.vm.box = "opscode-ubuntu-12.04_chef-11.4.0"
+  config.vm.box_url = "https://opscode-vm-bento.s3.amazonaws.com/vagrant/opscode_ubuntu-12.04_chef-11.4.0.box"
   config.ssh.forward_agent = true
 
-  config.vm.network :private_network, ip: '192.168.237.95' # 192.168.cdr.wl
+  config.vm.network "private_network", ip: "192.168.237.95"
+  config.vm.network :forwarded_port, guest: 3000, host: 3000
 
-  set_port_mapping_for(config, 'elasticsearch', 9200,  custom_settings)
-  set_port_mapping_for(config, 'postgres',      5432,  custom_settings)
-  set_port_mapping_for(config, 'redis',         6379,  custom_settings)
-  set_port_mapping_for(config, 'rails',         3000,  custom_settings, true)
+  config.vm.provision :chef_solo do |chef|
+    chef.cookbooks_path = ["cookbooks"]
+      chef.json = VAGRANT_JSON
+      chef.log_level = :debug
 
-  config.vm.synced_folder '.', '/home/vagrant/web', nfs: custom_settings['use_nfs']
-
-  config.vm.provider :virtualbox do |vb|
-    # Use custom settings unless they don't exist
-    if virtualbox_settings = custom_settings['virtualbox']
-      vb.customize ['modifyvm', :id, '--cpus',   "#{virtualbox_settings['cpus']   || 2}"]
-      vb.customize ['modifyvm', :id, '--memory', "#{virtualbox_settings['memory'] || 2048}"]
-    else
-      vb.customize ['modifyvm', :id, '--cpus',   '2']
-      vb.customize ['modifyvm', :id, '--memory', '2048']
-    end
-
-    vb.customize ['modifyvm', :id, '--ioapic', 'on']
-
-    # https://github.com/mitchellh/vagrant/issues/1807
-    # whatupdave: my VM was super slow until I added these:
-    vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
-    vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
-    # seems to be safe to run: https://github.com/griff/docker/commit/e5239b98598ece4287c1088e95a2eaed585d2da4
-  end
-
-  if Vagrant.has_plugin?('vagrant-vbguest')
-    config.vbguest.auto_update = true
-    config.vbguest.no_remote = false
-  else
-    puts "Please install the 'vagrant-vbguest' plugin"
-  end
-
-  if Vagrant.has_plugin?('vagrant-cachier')
-    config.cache.scope = :box
-  else
-    puts "Please install the 'vagrant-cachier' plugin"
-  end
-end
-
-def set_port_mapping_for(config, service, guest_port, settings, force = false)
-  if settings['network'] && settings['network']['port_mappings'] && settings['network']['port_mappings'][service]
-    host_port = settings['network']['port_mappings'][service]
-
-    if ENV['VAGRANT_DEBUG']
-      puts " !! Setting up port mapping rule for #{service} host:#{host_port} => guest:#{guest_port}"
-    end
-    config.vm.network(:forwarded_port, guest: guest_port,  host: host_port)
-  else
-    # no host port mapping was defined
-    if force
-      # but we want to force a mapping for the default ports
-      if ENV['VAGRANT_DEBUG']
-        puts " !! Setting up port mapping rule for #{service} host:#{guest_port} => guest:#{guest_port}"
-      end
-      config.vm.network(:forwarded_port, guest: guest_port,  host: guest_port)
-    end
+      VAGRANT_JSON['run_list'].each do |recipe|
+        chef.add_recipe(recipe)
+      end if VAGRANT_JSON['run_list']
+      chef.json = {
+      :rbenv      => {
+        :user_installs => [
+          {
+            :user   => "vagrant",
+            :rubies => [
+              "2.1.5"
+            ],
+            :global => "2.1.5"
+          }
+        ]
+      },
+      :git        => {
+        :prefix => "/usr/local"
+      },
+      :redis      => {
+        :bind        => "127.0.0.1",
+        :port        => "6379",
+        :config_path => "/etc/redis/redis.conf",
+        :daemonize   => "yes",
+        :timeout     => "300",
+        :loglevel    => "notice"
+      },
+      :postgresql => {
+        :config   => {
+          :listen_addresses => "*",
+          :port             => "5432"
+        },
+        :pg_hba   => [
+          {
+            :type   => "local",
+            :db     => "postgres",
+            :user   => "postgres",
+            :addr   => nil,
+            :method => "trust"
+          },
+          {
+            :type   => "host",
+            :db     => "all",
+            :user   => "all",
+            :addr   => "0.0.0.0/0",
+            :method => "md5"
+          },
+          {
+            :type   => "host",
+            :db     => "all",
+            :user   => "all",
+            :addr   => "::1/0",
+            :method => "md5"
+          }
+        ],
+        :password => {
+          :postgres => "password"
+        }
+      }
+    }
   end
 end
